@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Palette — Extract colors from any image</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #19191e;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --text: #e8e8f0;
+    --muted: #7a7a8e;
+    --accent: #7c6af5;
+    --accent-dim: rgba(124,106,245,0.15);
+    --success: #4ade80;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+    --radius: 10px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px 80px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  header h1 {
+    font-size: 2.4rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  header h1 span {
+    color: var(--accent);
+  }
+
+  header p {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-weight: 300;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 860px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 56px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .drop-icon {
+    font-size: 2.4rem;
+    line-height: 1;
+    margin-bottom: 14px;
+    filter: grayscale(0.3);
+  }
+
+  .drop-zone h2 {
+    font-size: 1.05rem;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .drop-zone p {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .drop-zone p span {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* Preview + palette panel */
+  .result-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .result-panel.visible { display: block; }
+
+  .preview-wrap {
+    width: 100%;
+    max-height: 380px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+  }
+
+  .preview-wrap img {
+    width: 100%;
+    max-height: 380px;
+    object-fit: contain;
+  }
+
+  .palette-section {
+    padding: 24px;
+  }
+
+  .palette-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .palette-controls label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .count-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 120px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .count-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+
+  .count-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+  .count-val {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    color: var(--accent);
+    min-width: 16px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s, transform 0.1s;
+    font-family: var(--font-sans);
+  }
+
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn:hover { opacity: 0.85; }
+
+  /* Swatches */
+  .swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+  }
+
+  .swatch {
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+
+  .swatch:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .swatch-color {
+    height: 80px;
+    width: 100%;
+  }
+
+  .swatch-info {
+    padding: 8px 10px;
+  }
+
+  .swatch-hex {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .swatch-pct {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+
+  .swatch-copied {
+    font-size: 0.68rem;
+    color: var(--success);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .swatch-copied.show { opacity: 1; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 0.85rem;
+    color: var(--text);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 100;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  canvas { display: none; }
+
+  @media (max-width: 600px) {
+    header h1 { font-size: 1.8rem; }
+    .swatches { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>pa<span>lette</span></h1>
+  <p>Drop any image. Get its colors instantly — no server, no tracking, all local.</p>
+</header>
+
+<div class="container">
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="drop-icon">🎨</div>
+    <h2>Drop an image here</h2>
+    <p>or <span>click to browse</span> — PNG, JPG, WEBP, GIF</p>
+  </div>
+
+  <div class="result-panel" id="resultPanel">
+    <div class="preview-wrap">
+      <img id="preview" src="" alt="Uploaded image">
+    </div>
+    <div class="palette-section">
+      <div class="palette-controls">
+        <label>
+          Colors
+          <input type="range" class="count-slider" id="colorCount" min="3" max="16" value="7">
+          <span class="count-val" id="colorCountVal">7</span>
+        </label>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="copyAllBtn">📋 Copy All</button>
+          <button class="btn btn-secondary" id="exportCssBtn">⬇ CSS Vars</button>
+          <button class="btn btn-primary" id="newImageBtn">New Image</button>
+        </div>
+      </div>
+      <div class="swatches" id="swatches"></div>
+    </div>
+  </div>
+</div>
+
+<canvas id="canvas"></canvas>
+<div class="toast" id="toast"></div>
+
+<script>
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const resultPanel = document.getElementById('resultPanel');
+  const preview = document.getElementById('preview');
+  const swatchesEl = document.getElementById('swatches');
+  const colorCountSlider = document.getElementById('colorCount');
+  const colorCountVal = document.getElementById('colorCountVal');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const toast = document.getElementById('toast');
+
+  let currentPixels = null;
+  let currentFile = null;
+
+  // Drag and drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) loadImage(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) loadImage(fileInput.files[0]);
+  });
+
+  colorCountSlider.addEventListener('input', () => {
+    colorCountVal.textContent = colorCountSlider.value;
+    if (currentPixels) renderPalette(extractPalette(currentPixels, +colorCountSlider.value));
+  });
+
+  document.getElementById('newImageBtn').addEventListener('click', () => {
+    resultPanel.classList.remove('visible');
+    dropZone.style.display = '';
+    fileInput.value = '';
+    currentPixels = null;
+  });
+
+  document.getElementById('copyAllBtn').addEventListener('click', () => {
+    const hexes = [...document.querySelectorAll('.swatch-hex')].map(el => el.textContent).join(', ');
+    navigator.clipboard.writeText(hexes).then(() => showToast('All hex values copied!'));
+  });
+
+  document.getElementById('exportCssBtn').addEventListener('click', () => {
+    const hexes = [...document.querySelectorAll('.swatch-hex')].map((el, i) => `  --color-${i + 1}: ${el.textContent};`).join('\n');
+    const css = `:root {\n${hexes}\n}`;
+    const blob = new Blob([css], { type: 'text/css' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'palette.css';
+    a.click();
+    showToast('CSS file downloaded!');
+  });
+
+  function loadImage(file) {
+    currentFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        // Sample at lower res for speed
+        const maxDim = 200;
+        const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+        canvas.width = Math.floor(img.width * scale);
+        canvas.height = Math.floor(img.height * scale);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        currentPixels = imageData.data;
+
+        preview.src = e.target.result;
+        dropZone.style.display = 'none';
+        resultPanel.classList.add('visible');
+
+        const count = +colorCountSlider.value;
+        renderPalette(extractPalette(currentPixels, count));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // --- Color extraction: k-means clustering ---
+
+  function extractPalette(pixels, k) {
+    // Sample pixels (skip transparent)
+    const samples = [];
+    const stride = Math.max(4, Math.floor(pixels.length / 4 / 4000) * 4);
+    for (let i = 0; i < pixels.length; i += stride * 4) {
+      const a = pixels[i + 3];
+      if (a < 128) continue;
+      samples.push([pixels[i], pixels[i+1], pixels[i+2]]);
+    }
+
+    if (samples.length < k) return samples.map(s => ({ color: s, count: 1 }));
+
+    // Init centroids with k-means++ seeding
+    const centroids = [samples[Math.floor(Math.random() * samples.length)]];
+    while (centroids.length < k) {
+      const dists = samples.map(s => Math.min(...centroids.map(c => colorDistSq(s, c))));
+      const sum = dists.reduce((a, b) => a + b, 0);
+      let r = Math.random() * sum;
+      for (let i = 0; i < dists.length; i++) {
+        r -= dists[i];
+        if (r <= 0) { centroids.push(samples[i]); break; }
+      }
+      if (centroids.length < k) centroids.push(samples[samples.length - 1]);
+    }
+
+    // Run k-means
+    let assignments = new Array(samples.length).fill(0);
+    for (let iter = 0; iter < 20; iter++) {
+      let changed = false;
+      for (let i = 0; i < samples.length; i++) {
+        let best = 0, bestDist = Infinity;
+        for (let j = 0; j < k; j++) {
+          const d = colorDistSq(samples[i], centroids[j]);
+          if (d < bestDist) { bestDist = d; best = j; }
+        }
+        if (assignments[i] !== best) { assignments[i] = best; changed = true; }
+      }
+      if (!changed) break;
+      // Recompute centroids
+      for (let j = 0; j < k; j++) {
+        const group = samples.filter((_, i) => assignments[i] === j);
+        if (group.length === 0) continue;
+        centroids[j] = [
+          Math.round(group.reduce((s, c) => s + c[0], 0) / group.length),
+          Math.round(group.reduce((s, c) => s + c[1], 0) / group.length),
+          Math.round(group.reduce((s, c) => s + c[2], 0) / group.length),
+        ];
+      }
+    }
+
+    // Count and sort by frequency
+    const counts = new Array(k).fill(0);
+    assignments.forEach(j => counts[j]++);
+    const total = samples.length;
+
+    return centroids
+      .map((c, i) => ({ color: c, count: counts[i], pct: Math.round(counts[i] / total * 100) }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  function colorDistSq(a, b) {
+    return (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2;
+  }
+
+  function toHex([r, g, b]) {
+    return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  function luminance([r, g, b]) {
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+
+  function renderPalette(palette) {
+    swatchesEl.innerHTML = '';
+    palette.forEach(({ color, pct }) => {
+      const hex = toHex(color);
+      const lum = luminance(color);
+      const textColor = lum > 140 ? '#111' : '#fff';
+
+      const el = document.createElement('div');
+      el.className = 'swatch';
+      el.title = `Click to copy ${hex}`;
+      el.innerHTML = `
+        <div class="swatch-color" style="background:${hex}"></div>
+        <div class="swatch-info">
+          <div class="swatch-hex">${hex}</div>
+          <div class="swatch-pct">${pct}% of image</div>
+          <div class="swatch-copied" id="copied-${hex.slice(1)}">Copied!</div>
+        </div>
+      `;
+      el.addEventListener('click', () => {
+        navigator.clipboard.writeText(hex).then(() => {
+          const copied = el.querySelector('.swatch-copied');
+          copied.classList.add('show');
+          setTimeout(() => copied.classList.remove('show'), 1200);
+        });
+      });
+      swatchesEl.appendChild(el);
+    });
+  }
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2200);
+  }
+</script>
+</body>
+</html>
